@@ -8,8 +8,8 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn create(name: String) -> Self {
-        let color = Color::hsl(250.0, 1.0, 0.5);
+    pub fn create(name: String, hue: f32) -> Self {
+        let color = Color::hsl(hue % 360.0, 1.0, 0.5);
 
         Self {
             name,
@@ -18,5 +18,5 @@ impl Player {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct LocalPlayer;

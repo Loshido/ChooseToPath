@@ -1,11 +1,11 @@
 use aeronet::{io::Session, transport::Transport};
 use bevy::prelude::*;
 
-use crate::{network::{JOIN_LANE, LEAVE_LANE, MAPS_LANE, MOVEMENTS_LANE}, player::def::Player};
+use crate::{network::{JOIN_LANE, LEAVE_LANE, MAPS_LANE, MOVEMENTS_LANE}, player::def::{LocalPlayer, Player}};
 
 pub fn recv(
     mut commands: Commands,
-    mut players: Query<(Entity, &Player, &mut Transform)>,
+    mut players: Query<(Entity, &Player, &mut Transform, Option<&LocalPlayer>)>,
     mut clients: Query<
         (
             Entity,         // ..the entity ID
@@ -14,18 +14,29 @@ pub fn recv(
         With<Session>
     >,
 ) {
+    let local_name = match players.iter().find(|p| p.3.is_some()) {
+        Some(player) => player.1.name.clone(),
+        _ => "localhost".to_string()
+    };
+
     for (_, mut transport) in &mut clients {
         let transport = &mut *transport;
 
         for msg in transport.recv.msgs.drain() {
             match msg.lane {
                 JOIN_LANE => {
-                    match bincode::deserialize::<(Player, Vec2)>(&msg.payload) {
-                        Ok((player, position)) => {
-                            commands.spawn((
-                                player,
-                                Transform::from_xyz(position.x, position.y, 0.0),
-                            ));
+                    match bincode::deserialize::<Vec<(Player, Vec2)>>(&msg.payload) {
+                        Ok(players) => {
+                            for (player, position) in players.iter() {
+                                println!("Player {} joined", player.name);
+                                if player.name == local_name {
+                                    continue;
+                                }
+                                commands.spawn((
+                                    player.clone(),
+                                    Transform::from_xyz(position.x, position.y, 0.0),
+                                ));
+                            }
                         },
                         Err(_) => continue
                     }
@@ -33,7 +44,8 @@ pub fn recv(
                 LEAVE_LANE => {
                     match bincode::deserialize::<String>(&msg.payload) {
                         Ok(name) => {
-                            for (entity, player, _) in players.iter() {
+                            println!("Player {} disconnected", name);
+                            for (entity, player, _, _) in players.iter() {
                                 if player.name == name {
                                     commands.entity(entity).despawn();
                                 }
@@ -47,12 +59,12 @@ pub fn recv(
                     match bincode::deserialize::<Vec<(String, Vec2)>>(&msg.payload) {
                         Ok(positions) => {
                             'update: for (name, position) in positions.iter() {
-                                for (_, player, mut transform) in players.iter_mut() {
-                                    if name.to_string() == player.name {
+                                for (_, player, mut transform, _) in players.iter_mut() {
+                                    if name.to_string() == player.name && local_name != name.to_string() {
                                         transform.translation.x = position.x;
                                         transform.translation.y = position.y;
+                                        break 'update;
                                     }
-                                    break 'update;
                                 }
                             }
                         },

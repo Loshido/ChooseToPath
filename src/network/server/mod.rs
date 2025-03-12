@@ -19,8 +19,7 @@ impl Plugin for Network {
             .add_systems(Startup, serve)
             .add_systems(Update, (
                 handle::recv,
-                events::on_move,
-                events::on_join
+                events::on_change,
             ))
             .add_observer(observers::on_connected)
             .add_observer(observers::on_opened)

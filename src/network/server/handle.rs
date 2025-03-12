@@ -1,7 +1,7 @@
 use aeronet::{io::Session, transport::Transport};
-use bevy::prelude::*;
+use bevy::{asset::transformer, prelude::*};
 
-use crate::{network::{JOIN_LANE, MAPS_LANE, MOVEMENTS_LANE}, player::def::Player};
+use crate::{network::{JOIN_LANE, MAPS_LANE, MOVEMENTS_LANE}, player::{self, def::Player}};
 
 pub fn recv(
     mut commands: Commands,
@@ -23,11 +23,12 @@ pub fn recv(
                 JOIN_LANE => {
                     match bincode::deserialize::<(Player, Vec2)>(&msg.payload) {
                         Ok((player, position)) => {
+                            println!("joined {:?}, {:?}", player.name, position);
                             commands.entity(entity)
-                                .insert((
-                                    player,
-                                    Transform::from_xyz(position.x, position.y, 0.0)  
-                                ));
+                            .insert((
+                                player,
+                                Transform::from_xyz(position.x, position.y, 0.0)  
+                            ));
                         },
                         Err(_) => continue
                     }
@@ -37,24 +38,18 @@ pub fn recv(
                         Ok(position) => {
                             if let Some(ref mut transform) = transform {
                                 transform.translation.x = position.x;
-                                transform.translation.x = position.x;
+                                transform.translation.y = position.y;
                             }
                         },
-                        Err(_) => continue
+                        Err(_) => {
+                            println!("failed to deserialize movements");
+                            continue
+                        }
                     }
                 },
                 MAPS_LANE => {
                     match bincode::deserialize::<[u32; 2]>(&msg.payload) {
                         Ok(tile) => {
-                            // if let Some(player) = player {
-                            //     let payload = bincode::serialize::<>
-
-                            //     let _ = transport.send.push(
-                            //         MAPS_LANE, 
-                            //         msg, 
-                            //         Instant::now()
-                            //     );
-                            // }
                             println!("touched tile ({}:{})",
                                 tile[0],
                                 tile[1]

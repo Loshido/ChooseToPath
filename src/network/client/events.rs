@@ -1,7 +1,7 @@
 use bevy::prelude::*;
-use aeronet::{transport::Transport, io::web_time::Instant};
+use aeronet::{io::{web_time::Instant, Session}, transport::Transport};
 
-use crate::{network::JOIN_LANE, player::def::{LocalPlayer, Player}};
+use crate::{network::{JOIN_LANE, MOVEMENTS_LANE}, player::def::{LocalPlayer, Player}};
 
 pub fn on_join(
     mut transports: Query<&mut Transport, Added<Transport>>,
@@ -18,5 +18,21 @@ pub fn on_join(
             payload.clone().into(),
             Instant::now()
         );
+    }
+}
+pub fn on_move(
+    mut transports: Query<&mut Transport, With<Session>>,
+    players: Query<&Transform, (With<LocalPlayer>, Changed<Transform>, Without<Transport>)>
+) {
+    for player in players.iter() {
+        let payload = bincode::serialize::<Vec2>(&player.translation.xy()).unwrap();
+    
+        for mut transport in transports.iter_mut() {
+            let _ = transport.send.push(
+                MOVEMENTS_LANE,
+                payload.clone().into(),
+                Instant::now()
+            );
+        }
     }
 }

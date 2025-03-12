@@ -1,60 +1,66 @@
-use aeronet::{io::{Session, web_time::Instant}, transport::Transport};
+use std::ops::Deref;
+
+use aeronet::{io::web_time::Instant, transport::Transport};
 use bevy::prelude::*;
+use bincode::serialize;
 
 use crate::{network::{JOIN_LANE, MOVEMENTS_LANE}, player::def::Player};
 
-pub fn on_join(
-    mut transports: Query<(&mut Transport, &Player), With<Session>>,
-    players: Query<(&Player, &Transform), Added<Player>>
+pub fn on_change(
+    mut players: Query<(&mut Transport, Ref<Player>, Ref<Transform>)>
 ) {
-    if players.is_empty() {
-        return;
+    let mut players_list: Vec<(Player, Vec2)> = Vec::new();
+    let mut players_moving: Vec<(String, Vec2)> = Vec::new();
+    let mut players_incomming: Vec<(Player, Vec2)> = Vec::new();
+    for (_, player, transform) in players.iter() {
+        if player.is_added() {
+            players_incomming.push((
+                player.clone(),
+                transform.translation.xy()
+            ));
+        } else if transform.is_changed() {
+            players_moving.push((
+                player.name.clone(),
+                transform.translation.xy()
+            ))
+        }
     }
 
-    for (mut transport, remote_player) in transports.iter_mut() {
-        for player in players.iter() {
-            if remote_player.name == player.0.name {
-                continue;
-            }
-            
-            let payload = bincode::serialize::<(Player, Vec2)>(
-                &(
-                    player.0.clone(),
-                    player.1.translation.xy()
-                )
-            );
+    if !players_incomming.is_empty() {
+        players_list = players.iter()
+            .map(|p| (p.1.deref().clone(), p.2.translation.xy()))
+            .collect();
+    }
 
+    let join_payload = serialize::<Vec<(Player, Vec2)>>(&players_incomming)
+        .unwrap();
+    let move_payload = serialize::<Vec<(String, Vec2)>>(&players_moving)
+        .unwrap();
+    let players_payload = serialize::<Vec<(Player, Vec2)>>(&players_list)
+        .unwrap();
+
+    for (mut transport, ply, _) in players.iter_mut() {
+        if let Some(_) = players_incomming.iter().find(|p| p.0.name == ply.name) {
             let _ = transport.send.push(
-                JOIN_LANE,
-                payload.unwrap().into(), 
+                JOIN_LANE, 
+                players_payload.clone().into(), 
                 Instant::now()
             );
         }
-    }
-}
 
-pub fn on_move(
-    mut transports: Query<&mut Transport, With<Session>>,
-    players: Query<(&Player, &Transform), Changed<Player>>
-) {
-    if players.is_empty() {
-        return;
-    }
-
-    let players: Vec<(String, Vec2)> = players.iter()
-        .map(|ply| (
-            ply.0.name.clone(),
-            ply.1.translation.xy()
-        ))
-        .collect();
-
-    for mut transport in transports.iter_mut() {
-        let payload = bincode::serialize::<Vec<(String, Vec2)>>(&players);
-
-        let _ = transport.send.push(
-            MOVEMENTS_LANE,
-            payload.unwrap().into(), 
-            Instant::now()
-        );
+        if !players_incomming.is_empty() {
+            let _ = transport.send.push(
+                JOIN_LANE, 
+                join_payload.clone().into(), 
+                Instant::now()
+            );
+        }
+        if !players_moving.is_empty() {
+            let _ = transport.send.push(
+                MOVEMENTS_LANE, 
+                move_payload.clone().into(), 
+                Instant::now()
+            );
+        }
     }
 }
